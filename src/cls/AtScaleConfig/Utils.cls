@@ -1,140 +1,6 @@
-Include HLL
-
-/// <p>This class contains a few utility methods for setting up your Adaptive Analytics environment.
-/// The <method>Register</method> is a crucial part of initializing your Namespace for use with
-/// Adaptive Analytics, as it ensures all functions are available in the system's current default
-/// schema:</p>
-/// <example>do ##class(AtScaleUDAF.Utils).Register()</example>
-Class AtScaleUDAF.Utils
+/// The silly name is because it would otherwise map itself out of reach!
+Class AtScaleConfig.Utils
 {
-
-/// <p>This method creates the HyperLogLog and Quantile User-Defined Aggregate Functions in the 
-/// system's current default schema, so they can be invoked directly in SQL statements without 
-/// specifying a schema name. It also registers a few additional helper methods.</p>
-/// <p>This function can be invoked through ObjectScript:</p>
-/// <example>do ##class(AtScaleUDAF.Utils).Register()</example>
-/// or SQL:
-/// <example language="SQL">CALL AtScaleUDAF.Register()</example>
-/// <p>Use <method>Unregister<method> in case you want to remove these functions from the current
-/// schema.</p>
-ClassMethod Register() As %Status [ SqlName = Register, SqlProc ]
-{
-    kill ddl
-    set ddl = 5
-    set ddl(1) = "CREATE OR REPLACE AGGREGATE HLL_estimate(value sql_variant) RETURNS BIGINT "
-    set ddl(2) = "    INITIALIZE WITH AtScaleUDAF.HLL_Initialize "
-    set ddl(3) = "    ITERATE WITH AtScaleUDAF.HLL_Update "
-    set ddl(4) = "  " //  MERGE WITH AtScaleUDAF.HLL_MergeState "
-    set ddl(5) = "    FINALIZE WITH AtScaleUDAF.HLL_Estimate"
-    do RunDDL("HLL_estimate",.ddl)
-
-    kill ddl
-    set ddl = 5
-    set ddl(1) = "CREATE OR REPLACE AGGREGATE HLL_aggregate_estimate(value VARCHAR) RETURNS BIGINT "
-    set ddl(2) = "    INITIALIZE WITH AtScaleUDAF.HLL_Initialize "
-    set ddl(3) = "    ITERATE WITH AtScaleUDAF.HLL_MergeSketch "
-    set ddl(4) = "  " //  MERGE WITH AtScaleUDAF.HLL_MergeState "
-    set ddl(5) = "    FINALIZE WITH AtScaleUDAF.HLL_Estimate"
-    do RunDDL("HLL_aggregate_estimate",.ddl)
-    
-    kill ddl
-    set ddl = 5
-    set ddl(1) = "CREATE OR REPLACE AGGREGATE HLL_aggregate(value SQL_VARIANT) RETURNS VARCHAR(3200) "
-    set ddl(2) = "    INITIALIZE WITH AtScaleUDAF.HLL_Initialize "
-    set ddl(3) = "    ITERATE WITH AtScaleUDAF.HLL_Update "
-    set ddl(4) = " " //   MERGE WITH AtScaleUDAF.HLL_MergeState "
-    set ddl(5) = "    FINALIZE WITH AtScaleUDAF.HLL_Finalize"
-    do RunDDL("HLL_aggregate",.ddl)
-    
-    kill ddl
-    set ddl = 5
-    set ddl(1) = "CREATE OR REPLACE AGGREGATE HLL_aggregate_merge(value VARCHAR) RETURNS VARCHAR(3200) "
-    set ddl(2) = "    INITIALIZE WITH AtScaleUDAF.HLL_Initialize "
-    set ddl(3) = "    ITERATE WITH AtScaleUDAF.HLL_MergeSketch "
-    set ddl(4) = " " //   MERGE WITH AtScaleUDAF.HLL_MergeState "
-    set ddl(5) = "    FINALIZE WITH AtScaleUDAF.HLL_Finalize"
-    do RunDDL("HLL_aggregate_merge",.ddl)
-
-    kill ddl
-    set ddl = 5
-    set ddl(1) = "CREATE OR REPLACE AGGREGATE quantile_sketch_merge(state VARCHAR) RETURNS VARCHAR(3200) "
-    set ddl(2) = "    INITIALIZE WITH ATSCALEUDAF.QuantileMergeUDA_Initialize "
-    set ddl(3) = "    ITERATE WITH ATSCALEUDAF.QuantileMergeUDA_Iterate "
-    set ddl(4) = " " //   MERGE WITH ATSCALEUDAF.QuantileMergeUDA_Merge "
-    set ddl(5) = "    FINALIZE WITH ATSCALEUDAF.QuantileMergeUDA_Estimate"
-    do RunDDL("quantile_sketch_merge",.ddl)
-
-    kill ddl
-    set ddl = 5
-    set ddl(1) = "CREATE OR REPLACE AGGREGATE quantile_estimate(value DOUBLE, quantile DOUBLE, compression INTEGER) RETURNS DOUBLE "
-    set ddl(2) = "    INITIALIZE WITH ATSCALEUDAF.QuantileEstimateUDA_Initialize "
-    set ddl(3) = "    ITERATE WITH ATSCALEUDAF.QuantileEstimateUDA_Iterate "
-    set ddl(4) = " " //   MERGE WITH ATSCALEUDAF.QuantileEstimateUDA_Merge "
-    set ddl(5) = "    FINALIZE WITH ATSCALEUDAF.QuantileEstimateUDA_Estimate"
-    do RunDDL("quantile_estimate",.ddl)
-
-    kill ddl
-    set ddl = 5
-    set ddl(1) = "CREATE OR REPLACE AGGREGATE quantile_sketch(value DOUBLE, compression INTEGER) RETURNS VARCHAR(3200) "
-    set ddl(2) = "    INITIALIZE WITH ATSCALEUDAF.QuantileAggregateUDA_Initialize "
-    set ddl(3) = "    ITERATE WITH ATSCALEUDAF.QuantileAggregateUDA_Iterate "
-    set ddl(4) = " " //   MERGE WITH ATSCALEUDAF.QuantileAggregateUDA_Merge "
-    set ddl(5) = "    FINALIZE WITH ATSCALEUDAF.QuantileAggregateUDA_Finalize"
-    do RunDDL("quantile_sketch",.ddl)
-
-    kill ddl
-    set ddl = 2
-    set ddl(1) = "CREATE FUNCTION quantilefromsketch(sketch VARCHAR, quantile DOUBLE) RETURNS DOUBLE "
-    set ddl(2) = "    PROCEDURE LANGUAGE OBJECTSCRIPT { quit ##class(AtScaleUDAF.QuantileEstimateFromSketchUDF).evaluate(sketch, quantile)}"
-    do RunDDL("quantilefromsketch",.ddl)
-
-    kill ddl
-    set ddl = 2
-    set ddl(1) = "CREATE FUNCTION ATSCALE_HONEYBEE_VERSION() RETURNS VARCHAR "
-    set ddl(2) = "    PROCEDURE LANGUAGE OBJECTSCRIPT { quit ##class(AtScaleUDAF.HoneyBeeVersionUDF).AtscaleHoneybeeVersion()}"
-    do RunDDL("ATSCALE_HONEYBEE_VERSION",.ddl)
-   
-    quit $$$OK
-    
-RunDDL(name, &ddl) 
-    set rs = ##class(%SQL.Statement).%ExecDirect(,.ddl)
-    if rs.%SQLCODE'=0 {
-        write !,"Error creating UDAF ",name,": ",rs.%Message
-    } else {
-        write !,"Created UDAF ",name," successfully"
-    }
-}
-
-/// <p>In the event you need to remove the UDF and UDAF definitions created by 
-/// <method>Register</method> from the default schema in the current namespace, 
-/// this can be achieved using the <method>Unregister</method> function in
-/// ObjectScript:</p>
-/// <example>do ##class(AtScaleUDAF.Utils).Unregister()</example>
-/// or SQL:
-/// <example language="SQL">CALL AtScaleUDAF.Unregister()</example>
-/// <p>Note that this method only removes the entry points. It does not drop the corresponding
-/// code from the <package>AtScaleUDAF</package>, <package>HLL</package> and
-/// <package>QUANTILE</package> packages.</p>
-ClassMethod Unregister() As %Status [ SqlName = Unregister, SqlProc ]
-{
-    do ##class(%SQL.Statement).%ExecDirect(,"DROP AGGREGATE HLL_estimate")
-    do ##class(%SQL.Statement).%ExecDirect(,"DROP AGGREGATE HLL_aggregate_estimate")
-    do ##class(%SQL.Statement).%ExecDirect(,"DROP AGGREGATE HLL_aggregate")
-    do ##class(%SQL.Statement).%ExecDirect(,"DROP AGGREGATE HLL_aggregate_merge")
-    do ##class(%SQL.Statement).%ExecDirect(,"DROP AGGREGATE quantile_sketch_merge")
-    do ##class(%SQL.Statement).%ExecDirect(,"DROP AGGREGATE quantile_estimate")
-    do ##class(%SQL.Statement).%ExecDirect(,"DROP AGGREGATE quantile_sketch")
-    do ##class(%SQL.Statement).%ExecDirect(,"DROP FUNCTION quantilefromsketch")
-    do ##class(%SQL.Statement).%ExecDirect(,"DROP FUNCTION ATSCALE_HONEYBEE_VERSION")
-    quit $$$OK
-}
-
-// Utility method returning the HLL Prefix
-
-ClassMethod HLLPrefix() As %String [ Internal ]
-{
-    Return "_atscale_v"_##class(AtScaleUDAF.HoneyBeeVersionUDF).AtscaleHoneybeeVersion() _":"_"d14_"
-}
 
 /// <p>This function creates a new database to use for storing Adaptive Analytics aggregate data,
 /// pre-calculated by Adaptive Analytics to serve queries faster based on analysis of the source 
@@ -155,13 +21,13 @@ ClassMethod HLLPrefix() As %String [ Internal ]
 /// creating a database!) and provide a filesystem location where the database should be created, such 
 /// as /usr/irissys/mgr/aggregates, and the name of the "aggregate schema" you specified in the 
 /// warehouse setup screen.</p>
-/// <example>write ##class(AtScaleUDAF.Utils).CreateDatabase("/usr/irissys/mgr/aggregates")</example>
+/// <example>write ##class(AtScaleConfig.Utils).CreateDatabase("/usr/irissys/mgr/aggregates")</example>
 ClassMethod CreateDatabase(location As %String, package As %String = "AtScale", verbose As %Boolean = 1) As %Status [ SqlName = CreateDatabase, SqlProc ]
 {
     set sc = $$$OK, namespace = $namespace
     try {
-        if ($$$LOWER(package) = "atscaleudaf") {
-            write:verbose !,"Cannot map the 'AtScaleUDAF' package using this script, as it would render this class inaccessible"
+        if ($$$LOWER(package) = "atscaleconfig") {
+            write:verbose !,"Cannot map the 'AtScaleConfig' package using this script, as it would render this class inaccessible"
             set sc = $$$ERROR($$$GeneralError,"Invalid package name: '"_package_"'")
             quit
         }
