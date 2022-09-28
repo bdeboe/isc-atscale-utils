@@ -174,7 +174,8 @@ ClassMethod GetTableStatsExecute(ByRef qHandle As %Binary, tableName As %String)
 			quit
 		}
         set $lb(packageName, justTheTableName, className) = metadata
-
+        set storageName = className _"||"_ ##class(%Dictionary.CompiledClass).%OpenId(className).StorageStrategy 
+            
         set hasStats = $case(##class(%SQL.Manager.Catalog).GetCurrentTableExtentSize(packageName, justTheTableName),"":0, 100000:0, :1)
 
         // if ExtentSize was not set, check if there are custom selectivity settings
@@ -184,10 +185,13 @@ ClassMethod GetTableStatsExecute(ByRef qHandle As %Binary, tableName As %String)
         } 
         do:'hasStats ##class(%SQL.Statement).%ExecDirect(,"TUNE TABLE "_tableName)
         
-        set rs = ##class(%SQL.Statement).%ExecDirect(,"SELECT * FROM %SQL_Manager.Fields(?,?)", $lg(metadata,1), $lg(metadata,2))
+        set rs = ##class(%SQL.Statement).%ExecDirect(,"SELECT f.*, p.Name AS PROPERTY_NAME FROM %SQL_Manager.Fields(?,?) f LEFT JOIN %Dictionary.CompiledProperty p ON f.FIELD_NAME = p.SqlFieldName WHERE p.parent = ?", packageName, justTheTableName, className)
         while rs.%Next() {
+            set prop = rs.%Get("PROPERTY_NAME")
+            &SQL(SELECT COUNT(*) INTO :cdm FROM %Dictionary.CompiledStorageData WHERE parent = :storageName AND Attribute = :prop AND Structure = 'vector')
+            set storageType = $s(cdm:"columnar", 1:"row")
             set qHandle = qHandle+1,
-                qHandle(qHandle) = $lb(+rs.%Get("COLUMN_NUMBER"),rs.%Get("FIELD_NAME"),rs.%Get("DATATYPE"),rs.%Get("REQUIRED"),rs.%Get("HIDDEN"),rs.%Get("MAXLEN"),rs.%Get("MINVAL"),rs.%Get("MAXVAL"),rs.%Get("SELECTIVITY"),rs.%Get("OUTLIER_SELECTIVITY"),rs.%Get("OUTLIER_VALUE"),+rs.%Get("AVERAGE_FIELD_SIZE"))
+                qHandle(qHandle) = $lb(+rs.%Get("COLUMN_NUMBER"),rs.%Get("FIELD_NAME"),rs.%Get("DATATYPE"),storageType,rs.%Get("REQUIRED"),rs.%Get("HIDDEN"),rs.%Get("MAXLEN"),rs.%Get("MINVAL"),rs.%Get("MAXVAL"),rs.%Get("SELECTIVITY"),rs.%Get("OUTLIER_SELECTIVITY"),rs.%Get("OUTLIER_VALUE"),+rs.%Get("AVERAGE_FIELD_SIZE"))
         }
         
     } catch (ex) {
